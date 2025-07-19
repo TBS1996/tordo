@@ -23,11 +23,15 @@ impl App {
         let mut todo: Vec<Task> = vec![];
         let mut in_progress: Vec<Task> = vec![];
         let mut suspended: Vec<Task> = vec![];
+        let mut blocked: Vec<Task> = vec![];
         let tasks = self.ledger.load_all();
         let task_qty = tasks.len();
         for task  in tasks {
             let status = task.status;
             match status {
+                Status::Blocked => {
+                    blocked.push(task);
+                }
                 Status::Todo => {
                     todo.push(task);
                 },
@@ -45,6 +49,7 @@ impl App {
 
         let mut out = Vec::with_capacity(task_qty);
         out.extend(in_progress);
+        out.extend(blocked);
         out.extend(todo);
         out.extend(suspended);
         out.extend(done);
@@ -320,6 +325,7 @@ enum Status {
     Inprogress,
     Done,
     Suspended,
+    Blocked,
 }
 
 impl Display for Status {
