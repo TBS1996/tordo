@@ -268,9 +268,9 @@ dependencies = [
 
 [[package]]
 name = "ledgerstore"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "662336bdbfda853e9c6718106a62cd826b7c233f2762534d26bd063fd127814f"
+checksum = "ee10f0f9d0715f26f8c1c159454c495d7b9f7c38ce33092cf7f8ddf6018b33c2"
 dependencies = [
  "either",
  "serde",

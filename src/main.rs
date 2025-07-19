@@ -13,6 +13,48 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Widget};
 use reformy::FormRenderable;
 
 
+struct App {
+    ledger: Ledger<Task>,
+}
+
+impl App {
+    fn tasks(&self) -> Vec<Task> {
+        let mut done: Vec<Task> = vec![];
+        let mut todo: Vec<Task> = vec![];
+        let mut in_progress: Vec<Task> = vec![];
+        let mut suspended: Vec<Task> = vec![];
+        let tasks = self.ledger.load_all();
+        let task_qty = tasks.len();
+        for task  in tasks {
+            let status = task.status;
+            match status {
+                Status::Todo => {
+                    todo.push(task);
+                },
+                Status::Inprogress => {
+                    in_progress.push(task);
+                },
+                Status::Done => {
+                    done.push(task);
+                },
+                Status::Suspended => {
+                    suspended.push(task);
+                },
+            }
+        }
+
+        let mut out = Vec::with_capacity(task_qty);
+        out.extend(in_progress);
+        out.extend(todo);
+        out.extend(suspended);
+        out.extend(done);
+
+        out
+
+    }
+}
+
+
 fn main() {
     run();
 }
@@ -21,28 +63,34 @@ fn run() -> Option<()> {
     let root = dirs::data_dir().unwrap().join("tordo");
     fs::create_dir_all(&root).unwrap();
     let ledger: Ledger<Task> = Ledger::new(root);
-    let items: Vec<Task> = ledger.load_all().into_iter().collect();
+
+    let app = App {
+        ledger
+    };
+
+    let  items = app.tasks();
+
     if items.is_empty() {
         let action = ledgerstore::TheLedgerAction::Create(Task::new("new task".to_string()));
-        ledger.modify(TheLedgerEvent::new(TaskID::new_v4(), action)).unwrap();
+        app.ledger.modify(TheLedgerEvent::new(TaskID::new_v4(), action)).unwrap();
     }
 
     loop {
-        let items: Vec<Task> = ledger.load_all().into_iter().collect();
+        let items: Vec<Task> = app.tasks();
         if let Ok(Some(act)) = run_selection_menu(items){
             match act {
                 SelAct::Modify(item) => {
                     if let Some(action)  = bruhmain() {
                         let action = ledgerstore::TheLedgerAction::Modify(action);
-                        ledger.modify(TheLedgerEvent::new(item.id, action)).unwrap();
+                        app.ledger.modify(TheLedgerEvent::new(item.id, action)).unwrap();
                     }
                 },
                 SelAct::Create => {
                     let action = ledgerstore::TheLedgerAction::Create(Task::new("new task".to_string()));
-                    ledger.modify(TheLedgerEvent::new(TaskID::new_v4(), action)).unwrap();
+                    app.ledger.modify(TheLedgerEvent::new(TaskID::new_v4(), action)).unwrap();
                 },
                 SelAct::Delete(item) => {
-                    ledger.modify(TheLedgerEvent::new_delete(item.id)).unwrap();
+                    app.ledger.modify(TheLedgerEvent::new_delete(item.id)).unwrap();
                 },
             }
         } else {
@@ -93,12 +141,12 @@ where
             if let Event::Key(key) = event::read()? {
                 match key.code {
                     KeyCode::Char('n') => break Some(SelAct::Create),
-                    KeyCode::Up => {
+                    KeyCode::Up | KeyCode::Char('k') => {
                         if selected > 0 {
                             selected -= 1;
                         }
                     }
-                    KeyCode::Down => {
+                    KeyCode::Down | KeyCode::Char('j')=> {
                         if selected + 1 < items.len() {
                             selected += 1;
                         }
@@ -230,6 +278,30 @@ enum TaskType {
     }
 }
 
+/// Importance is defined on the root
+/// time estimate is defined on the leaves
+///
+/// Priority is defined as importance divided by time   
+enum TheTaskType {
+    Leaf {
+        time_estimate: f32,
+        status: Status,
+    },
+    Epic {
+        importance: f32,
+        sub_tasks: NonEmpty<TaskID>,
+    },
+    SubEpic {
+        sub_tasks: NonEmpty<TaskID>,
+    },
+    Single {
+        time_estimate: f32,
+        importance: f32,
+        status: Status,
+    }
+}
+
+
 impl Task {
     fn new(name: String) -> Self {
         Self {
@@ -241,7 +313,7 @@ impl Task {
     }
 }
 
-#[derive(Default, Eq, PartialEq, PartialOrd, Ord, Clone, Debug, Hash, Deserialize, Serialize, FormRenderable)]
+#[derive(Default, Eq, PartialEq, PartialOrd, Ord, Clone, Debug, Hash, Deserialize, Serialize, FormRenderable, Copy)]
 enum Status {
     #[default]
     Todo,
